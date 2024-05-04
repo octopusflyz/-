@@ -110,11 +110,13 @@ public:
 	int loyalty;//忠诚度,只对lion使用
 	int go_step;//走的步数，只对iceman使用，为偶数hp-9/=1，attack+20
 	double morale;//士气值，只对dragon使用
+	bool die_inbattle;//死于战斗，便于发放奖励
 
 	weapon* weapon_ptr[3] = {NULL,NULL,NULL};//sword, bomb,和arrow，编号分别为0,1,2  最多各一个
 	headquarter* home;//指向它出生的司令部 red or blue
 
 	warrior(int life,int total,string color):id(total),side(color){
+		die_inbattle = 0;
 		//life是head所剩生命元
 		if (side == "red") {
 			home = &red;
@@ -146,6 +148,7 @@ public:
 			cout << ":10 ";
 			cout << side << " " << kind << " " << id << " reached red headquarter" << " with ";
 			cout << hp << " elements and force " << attack << '\n';
+			if(red.enemies==1&&mycity[0].warrior_record[1]!=NULL)red.being_occupied();//立马输出被占领的消息
 			//printf("%03d", hour);
 			//cout << ":010 red headquarter was taken" << '\n';
 		}
@@ -154,6 +157,7 @@ public:
 			cout << ":10 ";
 			cout << side << " " << kind << " " << id << " reached blue headquarter" << " with ";
 			cout << hp << " elements and force " << attack << '\n';
+			if (blue.enemies == 1&&mycity[N+1].warrior_record[0]!=NULL)blue.being_occupied();
 			//printf("%03d", hour);
 			//cout << ":10 blue headquarter was taken" << '\n';
 		}
@@ -166,31 +170,29 @@ public:
 	};
 	virtual void fight(warrior* a) {
 		if (weapon_ptr[0] != NULL) {//判断有无sword
-			a->hp -= attack + weapon_ptr[0]->attack;
+			
+			a->hp -= (attack + weapon_ptr[0]->attack);
 			weapon_ptr[0]->weaken();
 			if (weapon_ptr[0]->attack <= 0) {
 				weapon_ptr[0] = NULL;
 			}
 		}
 		else {
+			
 			a->hp -= attack;
 		}
 	}
 	virtual void fightback(warrior *a){
 		if (weapon_ptr[0] != NULL) {//判断有无sword
-			if (kind == "lion" && a->hp - attack/2 - weapon_ptr[0]->attack <= 0) {//lion贡献生命
-				hp += a->hp;
-			}
-			a->hp -= attack/2 + weapon_ptr[0]->attack;
+			
+			a->hp -= (attack/2 + weapon_ptr[0]->attack);
 			weapon_ptr[0]->weaken();
 			if (weapon_ptr[0]->attack <= 0) {
 				weapon_ptr[0] = NULL;
 			}
 		}
 		else {
-			if (kind == "lion" && a->hp - attack/2<= 0) {//lion贡献生命
-				hp += a->hp;
-			}
+			
 			a->hp -= attack/2;
 		}
 	}
@@ -342,7 +344,6 @@ void headquarter::makewarrior() {
 		break;
 	}
 	warrior_ptr.push_back(temp);
-	warrior_incity[sum_warrior] = temp;
 	warrior_inhead = temp;
 }
 void city::pick_hp(){
@@ -396,27 +397,16 @@ void warrior_die(warrior* tmp) {
 }
 void lion_escape() {
 	//分别找红方和蓝方的所有武士，看有没有可能逃跑的lion且不在head的
-	for (vector<warrior*>::iterator tmp = red.warrior_ptr.begin();tmp != red.warrior_ptr.end();tmp++) {
-		if ((*tmp)->kind == "lion" && (*tmp)->place != N + 1) {
-			if ((*tmp)->loyalty > 0)continue;
-			else {
-				(*tmp)->runaway();
-				red.warrior_ptr.erase(red.warrior_ptr.begin() + (*tmp)->id - 1);
-				mycity[(*tmp)->place].warrior_incity[0] = NULL;//红方先存储
-				mycity[(*tmp)->place].sum_incity--;
-				//分别删除head记录的这个武士和该城市这个武士
-			}
-		}
-	}
-	for (vector<warrior*>::iterator tmp = blue.warrior_ptr.begin();tmp != blue.warrior_ptr.end();tmp++) {
-		if ((*tmp)->kind == "lion" && (*tmp)->place != N + 1) {
-			if ((*tmp)->loyalty > 0)continue;
-			else {
-				(*tmp)->runaway();
-				blue.warrior_ptr.erase(blue.warrior_ptr.begin() + (*tmp)->id - 1);
-				mycity[(*tmp)->place].warrior_incity[1]=NULL;//蓝方后存储
-				mycity[(*tmp)->place].sum_incity--;
-				//分别删除head记录的这个武士和该城市这个武士
+	for (int i = 1;i <= N;i++) {
+		for (int j = 0;j < 2;j++) {
+			if (mycity[i].warrior_incity[j] != NULL && mycity[i].warrior_incity[j]->kind == "lion") {
+				warrior* tmp = mycity[i].warrior_incity[j];
+				if ((tmp)->loyalty > 0)continue;
+				else {
+					(tmp)->runaway();
+					mycity[i].warrior_incity[j] = NULL;
+					mycity[i].sum_incity--;
+				}
 			}
 		}
 	}
@@ -430,8 +420,10 @@ void warrior_march() {
 		
 		if (mycity[1].warrior_incity[1]->kind == "iceman") {//对于iceman,输出的生命值和攻击力应该是变化后的数值
 			if (mycity[1].warrior_incity[1]->go_step % 2 == 0) {
-				mycity[1].warrior_incity[1]->hp -= 9;
 				if (mycity[1].warrior_incity[1]->hp <= 9)mycity[1].warrior_incity[1]->hp = 1;
+				else {
+					mycity[1].warrior_incity[1]->hp -= 9;
+				}
 				mycity[1].warrior_incity[1]->attack += 20;
 			}
 		}
@@ -446,8 +438,10 @@ void warrior_march() {
 			mycity[i].warrior_incity[0]->go_step++;
 			if (mycity[i].warrior_incity[0]->kind == "iceman") {
 				if (mycity[i].warrior_incity[0]->go_step % 2 == 0) {
-					mycity[i].warrior_incity[0]->hp -= 9;
 					if (mycity[i].warrior_incity[0]->hp <= 9)mycity[i].warrior_incity[0]->hp = 1;
+					else {
+						mycity[i].warrior_incity[0]->hp -= 9;
+					}
 					mycity[i].warrior_incity[0]->attack += 20;
 				}
 			}
@@ -460,8 +454,10 @@ void warrior_march() {
 			mycity[i + 2].warrior_incity[1]->go_step++;
 			if (mycity[i + 2].warrior_incity[1]->kind == "iceman") {
 				if (mycity[i + 2].warrior_incity[1]->go_step % 2 == 0) {
-					mycity[i + 2].warrior_incity[1]->hp -= 9;
 					if (mycity[i + 2].warrior_incity[1]->hp <= 9)mycity[i + 2].warrior_incity[1]->hp = 1;
+					else {
+						mycity[i + 2].warrior_incity[1]->hp -= 9;
+					}
 					mycity[i + 2].warrior_incity[1]->attack += 20;
 				}
 			}
@@ -476,8 +472,10 @@ void warrior_march() {
 		mycity[N].warrior_incity[0]->go_step++;
 		if (mycity[N].warrior_incity[0]->kind == "iceman") {
 			if (mycity[N].warrior_incity[0]->go_step % 2 == 0) {
-				mycity[N].warrior_incity[0]->hp -= 9;
 				if (mycity[N].warrior_incity[0]->hp <= 9)mycity[N].warrior_incity[0]->hp = 1;
+				else {
+					mycity[N].warrior_incity[0]->hp -= 9;
+				}
 				mycity[N].warrior_incity[0]->attack += 20;
 			}
 		}
@@ -485,6 +483,7 @@ void warrior_march() {
 	}
 }
 void map_change() {
+	//和司令部被占领同时发生的事件，全都要输出
 	for (int i = 0;i <= N+1 ;i++) {
 		mycity[i].sum_incity = 0;
 		for (int j = 0;j < 2;j++) {
@@ -496,16 +495,18 @@ void map_change() {
 	red.warrior_inhead = NULL;blue.warrior_inhead = NULL;
 	//判断两方的head
 	for (int j = 0;j < 2;j++) {//红方的
-		if (mycity[0].warrior_incity[j] != NULL)red.enemies++;	
+		if (mycity[0].warrior_incity[j] != NULL) {
+			red.enemies++;
+		}
 		if (red.enemies == 2) {
 			red.occupied = 1;endflag = 1;
-			red.being_occupied();
+			//red.being_occupied();
 			break;
 	    }
 		else {
 			for (int k = 0;k < 2;k++) {
-				if (red.enemies_inhead[k] == NULL) {
-					red.enemies_inhead[k] = mycity[0].warrior_incity[j];
+				if (red.enemies_inhead[k] == NULL&& mycity[0].warrior_incity[j]!=NULL) {
+					red.enemies_inhead[k] = mycity[0].warrior_incity[j];break;
 				}
 			}
 		}
@@ -514,13 +515,13 @@ void map_change() {
 		if (mycity[N+1].warrior_incity[j] != NULL)blue.enemies++;
 		if (blue.enemies == 2) {
 			blue.occupied = 1;endflag = 1;
-			blue.being_occupied();
+			//blue.being_occupied();
 			break;
 		}
 		else {
 			for (int k = 0;k < 2;k++) {
-				if (blue.enemies_inhead[k] == NULL) {
-					blue.enemies_inhead[k] = mycity[N+1].warrior_incity[j];
+				if (blue.enemies_inhead[k] == NULL&& mycity[N + 1].warrior_incity[j]!=NULL) {
+					blue.enemies_inhead[k] = mycity[N + 1].warrior_incity[j];break;
 				}
 			}
 		}
@@ -544,7 +545,7 @@ void warrior_use_arrows() {//从西向东
 			}
 			else if (mycity[1].warrior_incity[1]->hp <= 0) {
 				mycity[1].deadbody++;
-				mycity[1].sum_incity--;
+				//mycity[1].sum_incity--;
 				printf("%03d", hour);
 				cout << ":35 red " << mycity[0].warrior_incity[0]->kind << " ";
 				cout << mycity[0].warrior_incity[0]->id << " shot and killed blue ";
@@ -566,7 +567,7 @@ void warrior_use_arrows() {//从西向东
 					cout << mycity[1].warrior_incity[0]->id << " shot" << '\n';
 				}
 				else if (mycity[2].warrior_incity[1]->hp <= 0) {
-					mycity[2].deadbody++;mycity[2].sum_incity--;
+					mycity[2].deadbody++;//mycity[2].sum_incity--;
 					printf("%03d", hour);
 					cout << ":35 red " << mycity[1].warrior_incity[0]->kind << " ";
 					cout << mycity[1].warrior_incity[0]->id << " shot and killed blue ";
@@ -590,7 +591,7 @@ void warrior_use_arrows() {//从西向东
 					cout << mycity[i].warrior_incity[0]->id << " shot" << '\n';
 				}
 				else if (mycity[i + 1].warrior_incity[1]->hp <= 0) {
-					mycity[i+1].deadbody++;mycity[i+1].sum_incity--;
+					mycity[i+1].deadbody++;//mycity[i+1].sum_incity--;
 					printf("%03d", hour);
 					cout << ":35 red " << mycity[i].warrior_incity[0]->kind << " ";
 					cout << mycity[i].warrior_incity[0]->id << " shot and killed blue ";
@@ -611,7 +612,7 @@ void warrior_use_arrows() {//从西向东
 					cout << mycity[i].warrior_incity[1]->id << " shot" << '\n';
 				}
 				else if (mycity[i - 1].warrior_incity[0]->hp <= 0) {
-					mycity[i-1].deadbody++;mycity[i-1].sum_incity--;
+					mycity[i-1].deadbody++;//mycity[i-1].sum_incity--;
 					printf("%03d", hour);
 					cout << ":35 blue " << mycity[i].warrior_incity[1]->kind << " ";
 					cout << mycity[i].warrior_incity[1]->id << " shot and killed red ";
@@ -635,7 +636,7 @@ void warrior_use_arrows() {//从西向东
 				cout << mycity[N].warrior_incity[1]->id << " shot" << '\n';
 			}
 			else if (mycity[N - 1].warrior_incity[0]->hp <= 0) {
-				mycity[N-1].deadbody++;mycity[N-1].sum_incity--;
+				mycity[N-1].deadbody++;//mycity[N-1].sum_incity--;
 				printf("%03d", hour);
 				cout << ":35 blue " << mycity[N].warrior_incity[1]->kind << " ";
 				cout << mycity[N].warrior_incity[1]->id << " shot and killed red ";
@@ -657,7 +658,7 @@ void warrior_use_arrows() {//从西向东
 				cout << blue.warrior_inhead->id << " shot" << '\n';
 			}
 			else if (mycity[N].warrior_incity[0]->hp <= 0) {
-				mycity[N].deadbody++;mycity[N].sum_incity--;
+				mycity[N].deadbody++;//mycity[N].sum_incity--;
 				printf("%03d", hour);
 				cout << ":35 blue " << blue.warrior_inhead->kind << " ";
 				cout << blue.warrior_inhead->id << " shot and killed red ";
@@ -668,10 +669,11 @@ void warrior_use_arrows() {//从西向东
 }
 void warrior_use_bombs() {
 	//sword, bomb,和arrow，编号分别为0,1,2
+	
 	for (int i = 1;i <= N;i++) {
 		warrior* red_tmp = mycity[i].warrior_incity[0];
 		warrior* blue_tmp = mycity[i].warrior_incity[1];
-		if (mycity[i].sum_incity == 2&&red_tmp->hp>0&& blue_tmp->hp > 0) {
+		if (mycity[i].warrior_incity[0]!=NULL&&mycity[i].warrior_incity[1]!=NULL&& red_tmp->hp>0 && blue_tmp->hp > 0) {	
 			//记录两方基本攻击力数据
 			int red_atk = red_tmp->attack;int red_sword = 0;
 			if (red_tmp->weapon_ptr[0] != NULL)
@@ -693,19 +695,19 @@ void warrior_use_bombs() {
 						cout << ":38 blue " << mycity[i].warrior_incity[1]->kind << " ";
 						cout << mycity[i].warrior_incity[1]->id << " used a bomb and killed red ";
 						cout << mycity[i].warrior_incity[0]->kind << " " << mycity[i].warrior_incity[0]->id << '\n';
-						warrior_die(mycity[i].warrior_incity[0]);
-						warrior_die(mycity[i].warrior_incity[1]);
+						warrior_die(mycity[i].warrior_incity[0]);mycity[i].warrior_incity[0] = NULL;
+						warrior_die(mycity[i].warrior_incity[1]);mycity[i].warrior_incity[1] = NULL;
 					}
 					//蓝方没死，红方判断是否会被反击死
-					else if (red_tmp->hp - blue_total <= 0 && red_tmp->weapon_ptr[1] != NULL) {
+					else if (blue_tmp->hp - red_total>0&&red_tmp->hp - blue_total <= 0 && red_tmp->weapon_ptr[1] != NULL) {
 						mycity[i].warrior_incity[0]->hp = 0;mycity[i].warrior_incity[1]->hp = 0;
 						mycity[i].warrior_incity[0]->weapon_ptr[1] = NULL;
 						printf("%03d", hour);
 						cout << ":38 red " << mycity[i].warrior_incity[0]->kind << " ";
 						cout << mycity[i].warrior_incity[0]->id << " used a bomb and killed blue ";
 						cout << mycity[i].warrior_incity[1]->kind << " " << mycity[i].warrior_incity[1]->id << '\n';
-						warrior_die(mycity[i].warrior_incity[0]);
-						warrior_die(mycity[i].warrior_incity[1]);
+						warrior_die(mycity[i].warrior_incity[0]);mycity[i].warrior_incity[0] = NULL;
+						warrior_die(mycity[i].warrior_incity[1]);mycity[i].warrior_incity[1] = NULL;
 					}
 				}
 				else {//ninja不会反击
@@ -716,8 +718,8 @@ void warrior_use_bombs() {
 						cout << ":38 blue " << mycity[i].warrior_incity[1]->kind << " ";
 						cout << mycity[i].warrior_incity[1]->id << " used a bomb and killed red ";
 						cout << mycity[i].warrior_incity[0]->kind << " " << mycity[i].warrior_incity[0]->id << '\n';
-						warrior_die(mycity[i].warrior_incity[0]);
-						warrior_die(mycity[i].warrior_incity[1]);
+						warrior_die(mycity[i].warrior_incity[0]);mycity[i].warrior_incity[0] = NULL;
+						warrior_die(mycity[i].warrior_incity[1]);mycity[i].warrior_incity[1] = NULL;
 					}
 				}
 			}
@@ -727,26 +729,28 @@ void warrior_use_bombs() {
 				int blue_total = blue_atk+ blue_sword;
 				//任一方使用了bomb，两者一起die
 				if (red_tmp->kind != "ninja") {
-					if (red_tmp->hp - blue_total <= 0 && red_tmp->weapon_ptr[1] != NULL) {//红方会死,且可以使用bomb
+					//if (red_tmp != NULL && red_tmp->weapon_ptr[1] != NULL)cout << "@" << '\n';
+					if (red_tmp->hp - blue_total <= 0 && red_tmp->weapon_ptr[1] !=NULL) {//红方会死,且可以使用bomb
+						
 						mycity[i].warrior_incity[0]->hp = 0;mycity[i].warrior_incity[1]->hp = 0;
 						mycity[i].warrior_incity[0]->weapon_ptr[1] = NULL;
 						printf("%03d", hour);
 						cout << ":38 red " << mycity[i].warrior_incity[0]->kind << " ";
 						cout << mycity[i].warrior_incity[0]->id << " used a bomb and killed blue ";
 						cout << mycity[i].warrior_incity[1]->kind << " " << mycity[i].warrior_incity[1]->id << '\n';
-						warrior_die(mycity[i].warrior_incity[0]);
-						warrior_die(mycity[i].warrior_incity[1]);
+						warrior_die(mycity[i].warrior_incity[0]);mycity[i].warrior_incity[0] = NULL;
+						warrior_die(mycity[i].warrior_incity[1]);mycity[i].warrior_incity[1] = NULL;
 					}
 					//红方没死，蓝方判断是否会被反击死
-					else if (blue_tmp->hp - red_total <= 0 && blue_tmp->weapon_ptr[1] != NULL) {
+					else if (red_tmp->hp - blue_total >0 && blue_tmp->hp - red_total <= 0 && blue_tmp->weapon_ptr[1] != NULL) {
 						mycity[i].warrior_incity[0]->hp = 0;mycity[i].warrior_incity[1]->hp = 0;
-						mycity[i].warrior_incity[0]->weapon_ptr[1] = NULL;
+						mycity[i].warrior_incity[1]->weapon_ptr[1] = NULL;
 						printf("%03d", hour);
-						cout << ":38 red " << mycity[i].warrior_incity[0]->kind << " ";
-						cout << mycity[i].warrior_incity[0]->id << " used a bomb and killed blue ";
-						cout << mycity[i].warrior_incity[1]->kind << " " << mycity[i].warrior_incity[1]->id << '\n';
-						warrior_die(mycity[i].warrior_incity[0]);
-						warrior_die(mycity[i].warrior_incity[1]);
+						cout << ":38 blue " << mycity[i].warrior_incity[1]->kind << " ";
+						cout << mycity[i].warrior_incity[1]->id << " used a bomb and killed red ";
+						cout << mycity[i].warrior_incity[0]->kind << " " << mycity[i].warrior_incity[0]->id << '\n';
+						warrior_die(mycity[i].warrior_incity[0]);mycity[i].warrior_incity[0] = NULL;
+						warrior_die(mycity[i].warrior_incity[1]);mycity[i].warrior_incity[1] = NULL;
 					}
 				}
 				else {//ninja不会反击
@@ -757,8 +761,8 @@ void warrior_use_bombs() {
 						cout << ":38 red " << mycity[i].warrior_incity[0]->kind << " ";
 						cout << mycity[i].warrior_incity[0]->id << " used a bomb and killed blue ";
 						cout << mycity[i].warrior_incity[1]->kind << " " << mycity[i].warrior_incity[1]->id << '\n';
-						warrior_die(mycity[i].warrior_incity[0]);
-						warrior_die(mycity[i].warrior_incity[1]);
+						warrior_die(mycity[i].warrior_incity[0]);mycity[i].warrior_incity[0] = NULL;
+						warrior_die(mycity[i].warrior_incity[1]);mycity[i].warrior_incity[1] = NULL;
 					}
 				}
 			}
@@ -783,6 +787,7 @@ void battle(int i, warrior* r, warrior* b) {
 				cout << r->kind << " " << r->id << " in city " << i << '\n';
 				if (r->hp <= 0) {//红死了
 					mycity[i].deadbody++;
+					r->die_inbattle = 1;
 					printf("%03d", hour);
 					cout << ":40 red " << r->kind << " " << r->id << " was killed in city " << i << '\n';
 				}
@@ -790,6 +795,7 @@ void battle(int i, warrior* r, warrior* b) {
 		}
 		else {//蓝死了
 			mycity[i].deadbody++;
+			b->die_inbattle = 1;
 			printf("%03d", hour);
 			cout << ":40 blue " << b->kind << " " << b->id << " was killed in city "<<i<<'\n';
 		}
@@ -810,12 +816,14 @@ void battle(int i, warrior* r, warrior* b) {
 			}
 			if (b->hp <= 0) {//蓝死了
 				mycity[i].deadbody++;
+				b->die_inbattle = 1;
 				printf("%03d", hour);
 				cout << ":40 blue " << b->kind << " " << b->id << " was killed in city " << i << '\n';
 			}
 		}
 		else {//红死了
 			mycity[i].deadbody++;
+			r->die_inbattle = 1;
 			printf("%03d", hour);
 			cout << ":40 red " << r->kind << " " << r->id << " was killed in city " << i << '\n';
 		}
@@ -828,7 +836,6 @@ void battle(int i, warrior* r, warrior* b) {
 		r->hp += tmp_b;
 	}
 	//注意此时先不清理deadbody
-
 }
 void war() {
 	for (int i = 1;i <= N;i++) {
@@ -908,6 +915,37 @@ void war() {
 				cout << ":40 blue " << mycity[i].warrior_incity[1]->kind << " " << mycity[i].warrior_incity[1]->id << " earned ";
 				cout << mycity[i].hp << " elements for his headquarter" << '\n';
 			}
+			//记录一下战绩,插旗子
+			if (mycity[i].warrior_incity[0]->hp > 0 && mycity[i].warrior_incity[1]->hp <= 0) {
+				if (mycity[i].record<0) {
+					mycity[i].record = 0;//原本是对方棋子，换棋归0，再+1
+				}
+				mycity[i].record++;
+			}
+			else if (mycity[i].warrior_incity[0]->hp <= 0 && mycity[i].warrior_incity[1]->hp > 0) {
+				if (mycity[i].record>0) {
+					mycity[i].record = 0;//原本是对方棋子，换棋归0，再-1
+				}
+				mycity[i].record--;
+			}
+			else if(mycity[i].warrior_incity[0]->hp > 0 && mycity[i].warrior_incity[1]->hp > 0) mycity[i].record = 0;//平局就不连续了,只包括battle和arrow，不包括bomb的
+			//双方都幸存(平局)
+
+			//cout <<"city "<<i<<" "<< mycity[i].record << '\n';
+
+			if (mycity[i].record == 2 && (mycity[i].flag == 0 || (mycity[i].flag == 1 && mycity[i].color == "blue"))) {
+				//注意原本就是自己的旗帜，经历一次平局，再连胜两次也不用更换
+				    mycity[i].flag = 1;
+					mycity[i].color = "red";
+					printf("%03d", hour);
+					cout << ":40 red flag raised in city " << i << '\n';
+			}
+			else if (mycity[i].record == -2 && (mycity[i].flag == 0 || (mycity[i].flag == 1 && mycity[i].color == "red"))) {
+				mycity[i].flag = 1;
+				mycity[i].color = "blue";
+				printf("%03d", hour);
+				cout << ":40 blue flag raised in city " << i << '\n';
+			}
 		}
 	}
 	
@@ -916,50 +954,39 @@ void war() {
 	for (int i = N; i >= 1; i--) {
 		if (mycity[i].warrior_incity[0] != NULL && mycity[i].warrior_incity[1] != NULL)
 			if (mycity[i].warrior_incity[0]->hp > 0 && mycity[i].warrior_incity[1]->hp <= 0 && red.life >= 8) {
-				mycity[i].warrior_incity[0]->hp += 8;
-				red.life -= 8;
+				
+					mycity[i].warrior_incity[0]->hp += 8;
+					red.life -= 8;
+				
 			}
 	}
 	//蓝色司令部奖励武士
 	for (int i = 1; i <= N; i++) {
 		if (mycity[i].warrior_incity[0] != NULL && mycity[i].warrior_incity[1] != NULL)
 			if (mycity[i].warrior_incity[1]->hp > 0 && mycity[i].warrior_incity[0]->hp <= 0 && blue.life >= 8) {
-				mycity[i].warrior_incity[1]->hp += 8;
-				blue.life -= 8;
+				
+					mycity[i].warrior_incity[1]->hp += 8;
+					blue.life -= 8;
+				
 			}
 	}
-	cout << red.life << '\n';
 	//武士为head earn生命元，记录战绩
 	for (int i = 1;i <= N;i++) {
 		if (mycity[i].warrior_incity[0]!=NULL&&mycity[i].warrior_incity[1]!=NULL) {
 			if (mycity[i].warrior_incity[0]->hp > 0 && mycity[i].warrior_incity[1]->hp <= 0) {
 				mycity[i].pick_hp();
-				mycity[i].record ++;//红方胜利，红色记录+1
+		
 			}
 			else if (mycity[i].warrior_incity[0]->hp <= 0 && mycity[i].warrior_incity[1]->hp > 0) {
 				mycity[i].pick_hp();
-				mycity[i].record --;//蓝方胜利，蓝色记录-1
+
 			}
 			else {//平局情况战绩清0
-				mycity[i].record = 0;//但如果中间有平局的战斗，就不算连续了
+		
 			}
 		}
 	}
-	//插旗帜
-	for (int i = 1;i <= N;i++) {
-		if (mycity[i].record == 2) {
-			mycity[i].flag = 1;
-			mycity[i].color = "red";
-			printf("%03d", hour);
-			cout << ":40 red flag raised in city " << i << '\n';
-		}
-		else if (mycity[i].record == -2) {
-			mycity[i].flag = 1;
-			mycity[i].color = "blue";
-			printf("%03d", hour);
-			cout << ":40 blue flag raised in city " << i << '\n';
-		}
-	}
+	
 	//清除地图上的deadbody
 	for (int i = 1;i <= N;i++) {//司令部的不会被攻击
 		for (int j = 0;j < 2;j++) {
@@ -974,6 +1001,7 @@ void war() {
 /*****************************************/
 void timeline(int endtime) {
 	while (nowtime <= endtime && endflag != 1) {
+		
 		hour = nowtime / 60;
 		minute = nowtime % 60;
 		switch (minute){
@@ -1014,20 +1042,32 @@ void timeline(int endtime) {
 			war();
 			break;
 		case 50://司令部报告生命元
+			
 			red.report_life();
 			blue.report_life();
 			break;
 		case 55://武士报告武器情况
-			for (int i = 0;i <= N + 1;i++) {
+			for (int i = 1;i <= N;i++) {
 				if (mycity[i].warrior_incity[0] != NULL) {
 					mycity[i].warrior_incity[0]->report_weapon();
 				}
 			}
-			for (int i = 0;i <= N + 1;i++) {
+			for (int i = 0;i < 2;i++) {
+				if (blue.enemies_inhead[i] != NULL) {
+					blue.enemies_inhead[i]->report_weapon();
+				}
+			}
+			for (int i = 0;i < 2;i++) {
+				if (red.enemies_inhead[i] != NULL) {
+					red.enemies_inhead[i]->report_weapon();
+				}
+			}
+			for (int i = 1;i <= N ;i++) {
 				if (mycity[i].warrior_incity[1] != NULL) {
 					mycity[i].warrior_incity[1]->report_weapon();
 				}
 			}
+			
 			break;
 		}
 		nowtime++;
@@ -1062,6 +1102,11 @@ void setting() {
 		mycity[i].sum_incity = 0;
 		mycity[i].deadbody = 0;
 	}
+//全局的
+	nowtime = 0;
+	hour = 0;
+	minute = 0;
+	endflag = 0;
 };
 int main()
 {
@@ -1074,10 +1119,9 @@ int main()
 			cin >> initial_hp[i];
 		for (int i = 0;i < 5;i++)
 			cin >> initial_atk[i];
-		int nowtime = 0;
+		
 		setting();
 		/********start our game*************/
-		
 		cout << "Case " << i << ":" << '\n';
 		timeline(T);
 	}
